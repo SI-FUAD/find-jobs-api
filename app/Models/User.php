@@ -2,48 +2,79 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
-        'name',
+        'user_id',
+        'first_name',
+        'last_name',
         'email',
+        'role',
         'password',
+        'avatar_text',
+        'avatar_color',
+        'phone',
+        'emergency_phone',
+        'gender',
+        'marital_status',
+        'father_name',
+        'mother_name',
+        'current_address',
+        'permanent_address',
+        'career_title',
+        'career_summary',
+        'profile_completion'
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
-        'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function applications()
+    {
+        return $this->hasMany(Application::class);
+    }
+
+    public function educations()
+    {
+        return $this->hasMany(Education::class);
+    }
+
+    public function experiences()
+    {
+        return $this->hasMany(Experience::class);
+    }
+
+    public function certificates()
+    {
+        return $this->hasMany(Certificate::class);
+    }
+
+    public function links()
+    {
+        return $this->hasMany(Link::class);
+    }
+
+    public function getFullNameAttribute()
+    {
+        return $this->first_name . ' ' . $this->last_name;
+    }
+
+    public function isAdmin()
+    {
+        return $this->role === 'admin';
     }
 }
