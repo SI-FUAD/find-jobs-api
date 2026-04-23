@@ -10,11 +10,12 @@ class Application extends Model
     use HasFactory;
 
     protected $fillable = [
-        'user_id',
+        'application_id',
         'job_id',
+        'user_id',
         'company_id',
         'status',
-        'was_shortlisted',
+        'is_shortlisted',
         'applied_at',
         'shortlisted_at',
         'accepted_at',

@@ -10,8 +10,8 @@ class Job extends Model
     use HasFactory;
 
     protected $fillable = [
+        'job_id',
         'company_id',
-        'company_name',
         'title',
         'level',
         'location',
@@ -22,6 +22,11 @@ class Job extends Model
         'date_posted',
         'deadline'
     ];
+
+    public function savedByUsers()
+    {
+        return $this->belongsToMany(User::class, 'saved_jobs')->withTimestamps();
+    }
 
     public function company()
     {
