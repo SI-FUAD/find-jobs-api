@@ -56,7 +56,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', [JobController::class, 'store']);
         Route::put('/{id}', [JobController::class, 'update']);
         Route::delete('/{id}', [JobController::class, 'destroy']);
-        Route::get('/', [JobController::class, 'myJobs']);
+        Route::get('/', [JobController::class, 'companyJobs']);
+        Route::get('/{id}', [JobController::class, 'companyJobDetail']);
     });
 
     // Applications
@@ -67,4 +68,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/saved-jobs', [SavedJobController::class, 'index']);
         Route::post('/saved-jobs/toggle', [SavedJobController::class, 'toggle']);
     });
+
+    Route::get('/company/candidates', [JobController::class, 'shortlistedCandidates']);
 });

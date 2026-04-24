@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Job;
+use App\Models\Application;
 
 class JobController extends Controller
 {
@@ -127,15 +128,25 @@ class JobController extends Controller
             return response()->json(['message' => 'Job not found'], 404);
         }
 
-        // 🔒 Only owner can update
-        if ($job->company_id !== $request->user()->company_id) {
+        if ($job->company_id !== $request->user()->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $job->update($request->all());
+        $validated = $request->validate([
+            'title' => 'sometimes|required|string|max:255',
+            'level' => 'sometimes|required|string',
+            'location' => 'sometimes|required|string',
+            'description' => 'sometimes|required|string',
+            'vacancy' => 'sometimes|required|integer|min:1',
+            'experience' => 'sometimes|required|string',
+            'salary' => 'nullable|string',
+            'deadline' => 'sometimes|required|date|after_or_equal:today'
+        ]);
+
+        $job->update($validated);
 
         return response()->json([
-            'message' => 'Job updated',
+            'message' => 'Job updated successfully',
             'job' => $job
         ]);
     }
@@ -150,7 +161,7 @@ class JobController extends Controller
         }
 
         // 🔒 Only owner can delete
-        if ($job->company_id !== $request->user()->company_id) {
+        if ($job->company_id !== $request->user()->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -162,11 +173,83 @@ class JobController extends Controller
     }
 
     // 🏢 COMPANY - Get own jobs
-    public function myJobs(Request $request)
+    public function companyJobs(Request $request)
     {
-        $jobs = Job::where('company_id', $request->user()->company_id)->get();
+        $jobs = Job::where('company_id', $request->user()->id)
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($job) {
+                return [
+                    'job_id' => $job->job_id,
+                    'title' => $job->title,
+                    'location' => $job->location,
+                    'level' => $job->level,
+                    'vacancy' => $job->vacancy,
+                    'deadline' => $job->deadline,
+                    'isExpired' => now()->gt($job->deadline),
+                    'created_at' => $job->created_at,
+                ];
+            });
 
         return response()->json($jobs);
+    }
+
+    public function companyJobDetail(Request $request, $job_id)
+    {
+        $job = Job::where('job_id', $job_id)->first();
+
+        if (!$job) {
+            return response()->json(['message' => 'Job not found'], 404);
+        }
+
+        // 🔒 ownership check
+        if ($job->company_id !== $request->user()->id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        return response()->json($job);
+    }
+
+    public function shortlistedCandidates(Request $request)
+    {
+        $company = $request->user();
+
+        // 1. Get company jobs
+        $jobs = Job::where('company_id', $company->id)->get();
+
+        $result = $jobs->map(function ($job) {
+
+            // 2. Get shortlisted applications for this job
+            $applications = Application::with('user')
+                ->where('job_id', $job->id) // DB ID
+                ->where('is_shortlisted', true)
+                ->get()
+                ->map(function ($app) {
+                    return [
+                        'application_id' => $app->id,
+                        'status' => $app->status,
+                        'applied_at' => $app->created_at,
+                        'updated_at' => $app->updated_at,
+
+                        'user' => [
+                            'user_id' => $app->user->user_id, // public id
+                            'name' => $app->user->first_name . ' ' . $app->user->last_name,
+                            'email' => $app->user->email,
+                            'phone' => $app->user->phone,
+                        ]
+                    ];
+                });
+
+            return [
+                'job' => [
+                    'job_id' => $job->job_id,
+                    'title' => $job->title,
+                ],
+                'candidates' => $applications
+            ];
+        });
+
+        return response()->json($result);
     }
 
     public function companiesWithJobs()
