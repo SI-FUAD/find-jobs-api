@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\IdGenerator;
+use App\Services\AvatarService;
+use App\Services\ProfileCompletionService;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -18,13 +21,30 @@ class AuthController extends Controller
             'password' => 'required|min:6'
         ]);
 
+        $avatar = AvatarService::generateUserAvatar(
+            $request->first_name,
+            $request->last_name
+        );
+
         $user = User::create([
-            'user_id' => 'u_' . rand(100000, 999999),
+            'user_id' => IdGenerator::generate(User::class, 'user_id', 'u_', 6),
             'first_name' => $request->first_name,
             'last_name' => $request->last_name,
             'email' => $request->email,
-            'password' => $request->password, // hashed automatically
+            'password' => $request->password,
+            'avatar_text' => $avatar['text'],
+            'avatar_color' => $avatar['color'],
         ]);
+
+        // Load empty relations so calculation works correctly
+        $user->load(['educations', 'experiences', 'links']);
+
+        // Calculate completion
+        $completion = ProfileCompletionService::calculate($user);
+
+        // Save
+        $user->profile_completion = $completion;
+        $user->save();
 
         return response()->json([
             'message' => 'User registered successfully',
@@ -32,6 +52,9 @@ class AuthController extends Controller
                 'user_id' => $user->user_id,
                 'name' => $user->full_name,
                 'email' => $user->email,
+                'avatar_text' => $user->avatar_text,
+                'avatar_color' => $user->avatar_color,
+                'profile_completion' => $user->profile_completion,
             ]
         ], 201);
     }

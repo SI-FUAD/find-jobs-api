@@ -11,11 +11,14 @@ class Education extends Model
 
     protected $fillable = [
         'user_id',
+        'position',
         'level',
         'institute',
         'result',
         'year'
     ];
+
+    protected $table = 'educations';
 
     public function user()
     {

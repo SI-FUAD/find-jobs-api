@@ -11,9 +11,12 @@ class Link extends Model
 
     protected $fillable = [
         'user_id',
+        'position',
         'label',
         'url'
     ];
+
+    protected $table = 'links';
 
     public function user()
     {

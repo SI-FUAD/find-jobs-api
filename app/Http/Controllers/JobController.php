@@ -5,22 +5,18 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Job;
 use App\Models\Application;
+use App\Services\IdGenerator;
+use App\Http\Resources\JobCardResource;
 
 class JobController extends Controller
 {
-    private function generateJobId()
-    {
-        do {
-            $id = 'j_' . rand(1000000000, 9999999999);
-        } while (Job::where('job_id', $id)->exists());
-
-        return $id;
-    }
-
     public function index(Request $request)
     {
-        $query = Job::with('company')
-            ->where('deadline', '>=', now()); // ACTIVE JOBS ONLY
+        $query = Job::with([
+            'company',
+            'applications'
+        ])
+            ->active();
 
         // SEARCH by title
         if ($request->search) {
@@ -42,35 +38,13 @@ class JobController extends Controller
             $query->where('experience', 'like', "%{$request->experience}%");
         }
 
-        return $query->get()->map(function ($job) {
-
-            return [
-                'job_id' => $job->job_id,
-                'title' => $job->title,
-                'location' => $job->location,
-                'level' => $job->level,
-                'experience' => $job->experience,
-                'salary' => $job->salary,
-                'vacancy' => $job->vacancy,
-                'description' => $job->description,
-                'datePosted' => $job->date_posted,
-                'deadline' => $job->deadline,
-
-                // RELATION (IMPORTANT)
-                'company' => [
-                    'company_id' => $job->company->company_id,
-                    'name' => $job->company->name,
-                    'logo_color' => $job->company->logo_color,
-                ],
-
-                // computed field
-                'isExpired' => false,
-            ];
-        });
+        return JobCardResource::collection(
+            $query->latest()->get()
+        );
     }
 
     // 🌍 PUBLIC - Get single job
-    public function show($job_id)
+    public function show(string $job_id)
     {
         $job = Job::where('job_id', $job_id)->first();
 
@@ -100,7 +74,7 @@ class JobController extends Controller
         ]);
 
         $job = Job::create([
-            'job_id' => $this->generateJobId(),
+            'job_id' => IdGenerator::generate(Job::class, 'job_id', 'j_', 10),
             'company_id' => $company->id,
             'title' => $validated['title'],
             'level' => $validated['level'],
@@ -120,7 +94,7 @@ class JobController extends Controller
     }
 
     // 🏢 COMPANY - Update job
-    public function update(Request $request, $job_id)
+    public function update(Request $request, string $job_id)
     {
         $job = Job::where('job_id', $job_id)->first();
 
@@ -152,7 +126,7 @@ class JobController extends Controller
     }
 
     // 🏢 COMPANY - Delete job
-    public function destroy(Request $request, $job_id)
+    public function destroy(Request $request, string $job_id)
     {
         $job = Job::where('job_id', $job_id)->first();
 
@@ -194,7 +168,7 @@ class JobController extends Controller
         return response()->json($jobs);
     }
 
-    public function companyJobDetail(Request $request, $job_id)
+    public function companyJobDetail(Request $request, string $job_id)
     {
         $job = Job::where('job_id', $job_id)->first();
 
@@ -252,40 +226,28 @@ class JobController extends Controller
         return response()->json($result);
     }
 
-    public function companiesWithJobs()
+    public function companiesWithJobs(Request $request)
     {
-        $today = now()->toDateString();
-
-        // 1. Get active jobs with company
-        $jobs = Job::with('company')
-            ->whereDate('deadline', '>=', $today)
+        $jobs = Job::with([
+            'company',
+            'applications'
+        ])
+            ->active()
             ->get();
 
-        // 2. Group by company
         $grouped = $jobs->groupBy('company_id');
 
-        // 3. Format response
         $companies = $grouped->map(function ($jobs) {
 
             $company = $jobs->first()->company;
 
             return [
-                'company_id' => $company->company_id,
-                'company_name' => $company->name,
-                'company_logo_color' => $company->logo_color,
-                'active_jobs_count' => $jobs->count(),
+                'companyId' => $company->company_id,
+                'brandName' => $company->name,
+                'brandColor' => $company->logo_color,
+                'activeJobsCount' => $jobs->count(),
 
-                'jobs' => $jobs->map(function ($job) {
-                    return [
-                        'id' => $job->id,
-                        'title' => $job->title,
-                        'location' => $job->location,
-                        'salary' => $job->salary,
-                        'experience' => $job->experience,
-                        'deadline' => $job->deadline,
-                        'company_name' => $job->company->name,
-                    ];
-                })
+                'jobs' => JobCardResource::collection($jobs),
             ];
         })->values();
 

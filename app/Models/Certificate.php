@@ -11,10 +11,13 @@ class Certificate extends Model
 
     protected $fillable = [
         'user_id',
+        'position',
         'name',
         'organization',
         'year'
     ];
+
+    protected $table = 'certificates';
 
     public function user()
     {

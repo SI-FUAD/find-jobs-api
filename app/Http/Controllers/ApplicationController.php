@@ -3,8 +3,13 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Database\QueryException;
 use App\Models\Job;
 use App\Models\Application;
+use App\Services\IdGenerator;
+use App\Http\Resources\JobCardResource;
+use App\Http\Resources\ApplicationStatusResource;
 
 class ApplicationController extends Controller
 {
@@ -12,12 +17,27 @@ class ApplicationController extends Controller
     {
         $user = $request->user();
 
-        $applications = Application::with('job')
+        if ($user->role !== 'user') {
+            return response()->json([
+                'message' => 'Unauthorized'
+            ], 403);
+        }
+
+        $applications = Application::with([
+            'job.company',
+            'job.applications'
+        ])
             ->where('user_id', $user->id)
             ->latest()
             ->get();
 
-        return response()->json($applications);
+        $jobs = $applications
+            ->map(fn($application) => $application->job)
+            ->filter()
+            ->unique('id')
+            ->values();
+
+        return JobCardResource::collection($jobs);
     }
 
     /**
@@ -25,46 +45,50 @@ class ApplicationController extends Controller
      */
     public function store(Request $request)
     {
-        // 1. Validate
         $request->validate([
             'job_id' => 'required|exists:jobs,job_id',
         ]);
 
-        // 2. Get logged-in user
         $user = $request->user();
 
-        // 3. Find job
+        if ($user->role !== 'user') {
+            return response()->json([
+                'message' => 'Unauthorized'
+            ], 403);
+        }
+
         $job = Job::where('job_id', $request->job_id)->first();
 
-        if (!$job) {
+        try {
+            $application = Application::create([
+                'application_id' => IdGenerator::generate(
+                    Application::class,
+                    'application_id',
+                    'a_',
+                    10
+                ),
+                'job_id' => $job->id,
+                'user_id' => $user->id,
+                'company_id' => $job->company_id,
+                'status' => 'applied',
+                'is_shortlisted' => false,
+                'applied_at' => now(),
+            ]);
+        } catch (QueryException $e) {
+
+            Log::error($e->getMessage());
+
+            if ($e->errorInfo[1] == 1062) {
+                return response()->json([
+                    'message' => 'You already applied for this job'
+                ], 400);
+            }
+
             return response()->json([
-                'message' => 'Job not found'
-            ], 404);
+                'message' => 'Something went wrong'
+            ], 500);
         }
 
-        // 4. Prevent duplicate application
-        $alreadyApplied = Application::where('job_id', $job->id)
-            ->where('user_id', $user->id)
-            ->exists();
-
-        if ($alreadyApplied) {
-            return response()->json([
-                'message' => 'You already applied for this job'
-            ], 400);
-        }
-
-        // 5. Create application
-        $application = Application::create([
-            'application_id' => 'a_' . rand(10000000, 99999999),
-            'job_id' => $job->id,
-            'user_id' => $user->id,
-            'company_id' => $job->company_id,
-            'status' => 'applied',
-            'is_shortlisted' => false,
-            'applied_at' => now(),
-        ]);
-
-        // 6. Response
         return response()->json([
             'message' => 'Application submitted successfully',
             'application' => $application
@@ -93,5 +117,63 @@ class ApplicationController extends Controller
     public function destroy(string $id)
     {
         //
+    }
+
+    public function status(Request $request)
+    {
+        $user = $request->user();
+
+        if ($user->role !== 'user') {
+            return response()->json([
+                'message' => 'Unauthorized'
+            ], 403);
+        }
+
+        $query = Application::with([
+            'job.company'
+        ])
+            ->where('user_id', $user->id);
+
+        // FILTER
+        if ($request->status && $request->status !== 'all') {
+
+            $query->where(
+                'status',
+                strtolower($request->status)
+            );
+        }
+
+        $applications = $query
+            ->latest('applied_at')
+            ->get();
+
+        // STATS
+        $stats = [
+            'total' => $user->applications()->count(),
+
+            'applied' => $user->applications()
+                ->where('status', 'applied')
+                ->count(),
+
+            'shortlisted' => $user->applications()
+                ->where('status', 'shortlisted')
+                ->count(),
+
+            'accepted' => $user->applications()
+                ->where('status', 'accepted')
+                ->count(),
+
+            'rejected' => $user->applications()
+                ->where('status', 'rejected')
+                ->count(),
+        ];
+
+        return response()->json([
+
+            'stats' => $stats,
+
+            'applications' => ApplicationStatusResource::collection($applications),
+
+        ]);
     }
 }

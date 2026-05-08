@@ -4,7 +4,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Company;
-use App\Models\Job;
+use App\Services\IdGenerator;
+use App\Services\AvatarService;
 use Illuminate\Support\Facades\Hash;
 
 class CompanyAuthController extends Controller
@@ -20,12 +21,13 @@ class CompanyAuthController extends Controller
         ]);
 
         $company = Company::create([
-            'company_id' => 'c_' . rand(100000, 999999),
+            'company_id' => IdGenerator::generate(Company::class, 'company_id', 'c_', 6),
             'name' => $request->name,
             'email' => $request->email,
             'phone' => $request->phone,
             'address' => $request->address,
-            'password' => $request->password
+            'password' => $request->password,
+            'logo_color' => AvatarService::generateCompanyAvatar($request->name),
         ]);
 
         return response()->json([
@@ -65,25 +67,6 @@ class CompanyAuthController extends Controller
 
         return response()->json([
             'message' => 'Company logged out'
-        ]);
-    }
-
-    public function dashboard(Request $request)
-    {
-        $company = $request->user();
-        $jobs_count = Job::where('company_id', $company->company_id)->count();
-        $active_jobs_count = Job::where('company_id', $company->company_id)->where('deadline', '>=', now())->count();
-        $expired_jobs_count = Job::where('company_id', $company->company_id)->where('deadline', '<', now())->count();
-
-        return response()->json([
-            'company_id' => $company->company_id,
-            'name' => $company->name,
-            'email' => $company->email,
-            'phone' => $company->phone,
-            'address' => $company->address,
-            'jobs_count' => $jobs_count,
-            'active_jobs_count' => $active_jobs_count,
-            'expired_jobs_count' => $expired_jobs_count
         ]);
     }
 }

@@ -56,22 +56,22 @@ class User extends Authenticatable
 
     public function educations()
     {
-        return $this->hasMany(Education::class);
+        return $this->hasMany(Education::class)->orderBy('position');
     }
 
     public function experiences()
     {
-        return $this->hasMany(Experience::class);
+        return $this->hasMany(Experience::class)->orderBy('position');
     }
 
     public function certificates()
     {
-        return $this->hasMany(Certificate::class);
+        return $this->hasMany(Certificate::class)->orderBy('position');
     }
 
     public function links()
     {
-        return $this->hasMany(Link::class);
+        return $this->hasMany(Link::class)->orderBy('position');
     }
 
     public function getFullNameAttribute()

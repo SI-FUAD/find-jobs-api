@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Job;
+use App\Http\Resources\JobCardResource;
 
 class SavedJobController extends Controller
 {
@@ -12,9 +13,21 @@ class SavedJobController extends Controller
     {
         $user = $request->user();
 
-        $savedJobs = $user->savedJobs()->with('company')->latest()->get();
+        if ($user->role !== 'user') {
+            return response()->json([
+                'message' => 'Unauthorized'
+            ], 403);
+        }
 
-        return response()->json($savedJobs);
+        $savedJobs = $user->savedJobs()
+            ->with([
+                'company',
+                'applications'
+            ])
+            ->orderByPivot('created_at', 'desc')
+            ->get();
+
+        return JobCardResource::collection($savedJobs);
     }
 
     // ✅ Save / Unsave (TOGGLE)
@@ -25,6 +38,12 @@ class SavedJobController extends Controller
         ]);
 
         $user = $request->user();
+
+        if ($user->role !== 'user') {
+            return response()->json([
+                'message' => 'Unauthorized'
+            ], 403);
+        }
 
         $job = Job::where('job_id', $request->job_id)->first();
 

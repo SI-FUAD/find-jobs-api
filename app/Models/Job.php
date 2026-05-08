@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Builder;
 
 class Job extends Model
 {
@@ -23,6 +24,11 @@ class Job extends Model
         'deadline'
     ];
 
+    protected $casts = [
+        'deadline' => 'date',
+        'date_posted' => 'date',
+    ];
+
     public function savedByUsers()
     {
         return $this->belongsToMany(User::class, 'saved_jobs')->withTimestamps();
@@ -38,8 +44,8 @@ class Job extends Model
         return $this->hasMany(Application::class, 'job_id', 'id');
     }
 
-    public function scopeActive($query)
+    public function scopeActive(Builder $query)
     {
-        return $query->where('deadline', '>=', now());
+        return $query->whereDate('deadline', '>=', today());
     }
 }
