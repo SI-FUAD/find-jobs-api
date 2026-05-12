@@ -48,4 +48,9 @@ class Job extends Model
     {
         return $query->whereDate('deadline', '>=', today());
     }
+
+    public function scopeExpired(Builder $query)
+    {
+        return $query->whereDate('deadline', '<', today());
+    }
 }

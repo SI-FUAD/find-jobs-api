@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Builder;
 
 class Application extends Model
 {
@@ -37,6 +38,16 @@ class Application extends Model
         return $this->belongsTo(Company::class);
     }
 
+    public function isApplied()
+    {
+        return $this->status === 'applied';
+    }
+
+    public function isShortlisted()
+    {
+        return $this->status === 'shortlisted';
+    }
+
     public function isAccepted()
     {
         return $this->status === 'accepted';
@@ -47,8 +58,23 @@ class Application extends Model
         return $this->status === 'rejected';
     }
 
-    public function isShortlisted()
+    public function scopeApplied(Builder $query)
     {
-        return $this->status === 'shortlisted';
+        return $query->where('status', 'applied');
+    }
+
+    public function scopeShortlisted(Builder $query)
+    {
+        return $query->where('status', 'shortlisted');
+    }
+
+    public function scopeAccepted(Builder $query)
+    {
+        return $query->where('status', 'accepted');
+    }
+
+    public function scopeRejected(Builder $query)
+    {
+        return $query->where('status', 'rejected');
     }
 }
