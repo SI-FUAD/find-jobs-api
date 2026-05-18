@@ -81,6 +81,13 @@ class User extends Authenticatable
 
     public function isAdmin()
     {
-        return $this->role === 'admin';
+        return $this instanceof self
+            && $this->role === 'admin';
+    }
+
+    public function isUser()
+    {
+        return $this instanceof self
+            && $this->role === 'user';
     }
 }

@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Database\QueryException;
 use App\Models\Job;
 use App\Models\Application;
+use App\Helpers\AuthHelper;
 use App\Services\IdGenerator;
 use App\Http\Resources\JobCardResource;
 use App\Http\Resources\ApplicationStatusResource;
@@ -15,19 +16,41 @@ class ApplicationController extends Controller
 {
     public function index(Request $request)
     {
-        $user = $request->user();
+        $auth = $request->user();
 
-        if ($user->role !== 'user') {
+        $isUser = AuthHelper::authorize($auth, 'user');
+
+        if (!$isUser) {
+
             return response()->json([
                 'message' => 'Unauthorized'
             ], 403);
         }
 
+        /*
+|--------------------------------------------------------------------------
+| AUTH OPTIMIZATION
+|--------------------------------------------------------------------------
+*/
+
+        $savedJobIds = $auth->savedJobs()
+            ->pluck('jobs.id')
+            ->toArray();
+
+        $appliedJobIds = $auth->applications()
+            ->pluck('job_id')
+            ->toArray();
+
+        /*
+|--------------------------------------------------------------------------
+| APPLIED JOBS
+|--------------------------------------------------------------------------
+*/
+
         $applications = Application::with([
             'job.company',
-            'job.applications'
         ])
-            ->where('user_id', $user->id)
+            ->where('user_id', $auth->id)
             ->latest()
             ->get();
 
@@ -36,6 +59,16 @@ class ApplicationController extends Controller
             ->filter()
             ->unique('id')
             ->values();
+
+        /*
+|--------------------------------------------------------------------------
+| SHARE WITH RESOURCE
+|--------------------------------------------------------------------------
+*/
+
+        $request->attributes->set('savedJobIds', $savedJobIds);
+
+        $request->attributes->set('appliedJobIds', $appliedJobIds);
 
         return JobCardResource::collection($jobs);
     }

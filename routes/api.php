@@ -41,11 +41,16 @@ Route::prefix('company/auth')->group(function () {
 |--------------------------------------------------------------------------
 */
 
-Route::get('/jobs', [JobController::class, 'index']);
+Route::middleware('optional.sanctum')->group(function () {
 
-Route::get('/jobs/{id}', [JobController::class, 'show']);
+    Route::get('/', [JobController::class, 'home']);
 
-Route::get('/companies', [JobController::class, 'companiesWithJobs']);
+    Route::get('/jobs', [JobController::class, 'index']);
+
+    Route::get('/jobs/{id}', [JobController::class, 'show']);
+
+    Route::get('/companies', [JobController::class, 'companiesWithJobs']);
+});
 
 /*
 |--------------------------------------------------------------------------

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Helpers\AuthHelper;
 use App\Services\IdGenerator;
 use App\Services\AvatarService;
 use App\Services\ProfileCompletionService;
@@ -75,7 +76,11 @@ class AuthController extends Controller
         }
 
         // 🔥 Create token
-        $token = $user->createToken('user_token')->plainTextToken;
+        if ($user->role === 'admin') {
+            $token = $user->createToken('admin_token')->plainTextToken;
+        } else {
+            $token = $user->createToken('user_token')->plainTextToken;
+        }
 
         return response()->json([
             'message' => 'Login successful',
@@ -87,10 +92,46 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        $auth = $request->user();
+
+        /*
+    |--------------------------------------------------------------------------
+    | USER LOGOUT
+    |--------------------------------------------------------------------------
+    */
+
+        if (AuthHelper::authorize($auth, 'user')) {
+
+            $auth->currentAccessToken()->delete();
+
+            return response()->json([
+                'message' => 'User logged out successfully'
+            ]);
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | ADMIN LOGOUT
+    |--------------------------------------------------------------------------
+    */
+
+        if (AuthHelper::authorize($auth, 'admin')) {
+
+            $auth->currentAccessToken()->delete();
+
+            return response()->json([
+                'message' => 'Admin logged out successfully'
+            ]);
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | UNAUTHORIZED
+    |--------------------------------------------------------------------------
+    */
 
         return response()->json([
-            'message' => 'Logged out'
-        ]);
+            'message' => 'Unauthorized'
+        ], 403);
     }
 }

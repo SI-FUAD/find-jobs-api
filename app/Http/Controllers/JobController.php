@@ -3,58 +3,265 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Models\Company;
 use App\Models\Job;
 use App\Models\Application;
+use App\Helpers\AuthHelper;
 use App\Services\IdGenerator;
 use App\Http\Resources\JobCardResource;
+use App\Http\Resources\JobViewResource;
 
 class JobController extends Controller
 {
+    public function home(Request $request)
+    {
+        $auth = $request->user();
+
+        $authType = AuthHelper::getAuthType($auth);
+
+        $authData = null;
+
+        /*
+    |--------------------------------------------------------------------------
+    | USER
+    |--------------------------------------------------------------------------
+    */
+
+        if ($authType === 'user') {
+
+            $authData = [
+                'type' => 'user',
+
+                'user_id' => $auth->user_id,
+
+                'name' => $auth->full_name,
+
+                'avatar_text' => $auth->avatar_text,
+
+                'avatar_color' => $auth->avatar_color,
+            ];
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | COMPANY
+    |--------------------------------------------------------------------------
+    */
+
+        if ($authType === 'company') {
+
+            $authData = [
+                'type' => 'company',
+
+                'company_id' => $auth->company_id,
+
+                'name' => $auth->name,
+
+                'logo_color' => $auth->logo_color,
+            ];
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | ADMIN
+    |--------------------------------------------------------------------------
+    */
+
+        if ($authType === 'admin') {
+
+            $authData = [
+                'type' => 'admin',
+
+                'name' => $auth->full_name,
+            ];
+        }
+
+        return response()->json([
+
+            'auth_type' => $authType,
+
+            'auth' => $authData,
+        ]);
+    }
+
     public function index(Request $request)
     {
-        $query = Job::with([
-            'company',
-            'applications'
-        ])
+        $auth = $request->user();
+
+        $isUser = AuthHelper::authorize($auth, 'user');
+
+        $query = Job::query()
+            ->with('company')
             ->active();
 
-        // SEARCH by title
-        if ($request->search) {
-            $query->where('title', 'like', "%{$request->search}%");
+        /*
+    |--------------------------------------------------------------------------
+    | SEARCH
+    |--------------------------------------------------------------------------
+    */
+
+        if ($request->filled('search')) {
+
+            $search = trim($request->search);
+
+            $query->where(function ($q) use ($search) {
+
+                $q->where('title', 'like', "%{$search}%");
+            });
         }
 
-        // LOCATION FILTER
-        if ($request->location) {
-            $query->where('location', 'like', "%{$request->location}%");
+        /*
+    |--------------------------------------------------------------------------
+    | LOCATION
+    |--------------------------------------------------------------------------
+    */
+
+        if ($request->filled('location')) {
+
+            $query->where(
+                'location',
+                'like',
+                "%{$request->location}%"
+            );
         }
 
-        // LEVEL FILTER
-        if ($request->level) {
+        /*
+    |--------------------------------------------------------------------------
+    | LEVEL
+    |--------------------------------------------------------------------------
+    */
+
+        if ($request->filled('level')) {
+
             $query->where('level', $request->level);
         }
 
-        // EXPERIENCE FILTER (basic version)
-        if ($request->experience) {
-            $query->where('experience', 'like', "%{$request->experience}%");
+        /*
+    |--------------------------------------------------------------------------
+    | EXPERIENCE
+    |--------------------------------------------------------------------------
+    */
+
+        if ($request->filled('experience')) {
+
+            $experience = (int) $request->experience;
+
+            $query->where(function ($q) use ($experience) {
+
+                $q->where('experience', 'like', "%{$experience}%")
+                    ->orWhere('experience', 'like', "%Fresher%");
+            });
         }
 
-        return JobCardResource::collection(
-            $query->latest()->get()
-        );
+        /*
+    |--------------------------------------------------------------------------
+    | SALARY
+    |--------------------------------------------------------------------------
+    */
+
+        if ($request->boolean('negotiable')) {
+
+            $query->where('salary', 'Negotiable');
+        }
+
+        if (
+            $request->filled('salary_min') &&
+            $request->filled('salary_max')
+        ) {
+
+            $query->where('salary', '!=', 'Negotiable')
+                ->whereBetween('salary', [
+                    $request->salary_min,
+                    $request->salary_max
+                ]);
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | AUTH OPTIMIZATION
+    |--------------------------------------------------------------------------
+    */
+
+        $savedJobIds = [];
+        $appliedJobIds = [];
+
+        if ($isUser) {
+            $savedJobIds = $auth->savedJobs()
+                ->pluck('jobs.id')
+                ->toArray();
+
+            $appliedJobIds = $auth->applications()
+                ->pluck('job_id')
+                ->toArray();
+        }
+
+        $jobs = $query
+            ->latest()
+            ->paginate(12);
+
+        $request->attributes->set('savedJobIds', $savedJobIds);
+        $request->attributes->set('appliedJobIds', $appliedJobIds);
+
+        return JobCardResource::collection($jobs);
     }
 
     // 🌍 PUBLIC - Get single job
-    public function show(string $job_id)
+    public function show(Request $request, string $job_id)
     {
-        $job = Job::where('job_id', $job_id)->first();
+        $auth = $request->user();
+
+        $isUser = AuthHelper::authorize($auth, 'user');
+
+        /*
+    |--------------------------------------------------------------------------
+    | JOB
+    |--------------------------------------------------------------------------
+    */
+
+        $job = Job::query()
+            ->with('company')
+            ->where('job_id', $job_id)
+            ->first();
 
         if (!$job) {
+
             return response()->json([
                 'message' => 'Job not found'
             ], 404);
         }
 
-        return response()->json($job);
+        /*
+    |--------------------------------------------------------------------------
+    | AUTH OPTIMIZATION
+    |--------------------------------------------------------------------------
+    */
+
+        $savedJobIds = [];
+
+        $appliedJobIds = [];
+
+        if ($isUser) {
+
+            $savedJobIds = $auth->savedJobs()
+                ->pluck('jobs.id')
+                ->toArray();
+
+            $appliedJobIds = $auth->applications()
+                ->pluck('job_id')
+                ->toArray();
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | SHARE WITH RESOURCE
+    |--------------------------------------------------------------------------
+    */
+
+        $request->attributes->set('savedJobIds', $savedJobIds);
+
+        $request->attributes->set('appliedJobIds', $appliedJobIds);
+
+        return new JobViewResource($job);
     }
 
     // 🏢 COMPANY - Create job
@@ -228,31 +435,106 @@ class JobController extends Controller
 
     public function companiesWithJobs(Request $request)
     {
-        $jobs = Job::with([
-            'company',
-            'applications'
-        ])
-            ->active()
-            ->get();
+        $auth = $request->user();
 
-        $grouped = $jobs->groupBy('company_id');
+        $isUser = AuthHelper::authorize($auth, 'user');
 
-        $companies = $grouped->map(function ($jobs) {
+        $companies = Company::query()
 
-            $company = $jobs->first()->company;
+            ->when($request->filled('search'), function ($query) use ($request) {
+
+                $query->where(
+                    'name',
+                    'like',
+                    "%{$request->search}%"
+                );
+            })
+
+            ->whereHas('jobs', function ($query) {
+
+                $query->active();
+            })
+
+            ->with([
+                'jobs' => function ($query) {
+
+                    $query->active()
+                        ->latest()
+                        ->with('company');
+                }
+            ])
+
+            ->paginate(6);
+
+        /*
+|--------------------------------------------------------------------------
+| AUTH OPTIMIZATION
+|--------------------------------------------------------------------------
+*/
+
+        $savedJobIds = [];
+        $appliedJobIds = [];
+
+        if ($isUser) {
+
+            $savedJobIds = $auth->savedJobs()
+                ->pluck('jobs.id')
+                ->toArray();
+
+            $appliedJobIds = $auth->applications()
+                ->pluck('job_id')
+                ->toArray();
+        }
+
+        /*
+|--------------------------------------------------------------------------
+| SHARE ARRAYS WITH RESOURCE
+|--------------------------------------------------------------------------
+*/
+
+        $request->attributes->set('savedJobIds', $savedJobIds);
+
+        $request->attributes->set('appliedJobIds', $appliedJobIds);
+
+        /*
+|--------------------------------------------------------------------------
+| TRANSFORM
+|--------------------------------------------------------------------------
+*/
+
+        $companies->getCollection()->transform(function ($company) {
 
             return [
-                'companyId' => $company->company_id,
-                'brandName' => $company->name,
-                'brandColor' => $company->logo_color,
-                'activeJobsCount' => $jobs->count(),
 
-                'jobs' => JobCardResource::collection($jobs),
+                'companyId' => $company->company_id,
+
+                'brandName' => $company->name,
+
+                'brandColor' => $company->logo_color,
+
+                'activeJobsCount' => $company->jobs->count(),
+
+                'jobs' => JobCardResource::collection(
+                    $company->jobs
+                ),
             ];
-        })->values();
+        });
 
         return response()->json([
-            'companies' => $companies
+
+            'data' => $companies->items(),
+
+            'links' => [
+                'next' => $companies->nextPageUrl(),
+                'prev' => $companies->previousPageUrl(),
+            ],
+
+            'pagination' => [
+                'currentPage' => $companies->currentPage(),
+                'lastPage' => $companies->lastPage(),
+                'perPage' => $companies->perPage(),
+                'total' => $companies->total(),
+            ],
         ]);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Company;
+use App\Helpers\AuthHelper;
 use App\Services\IdGenerator;
 use App\Services\AvatarService;
 use Illuminate\Support\Facades\Hash;
@@ -63,10 +64,25 @@ class CompanyAuthController extends Controller
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        $auth = $request->user();
+
+        /*
+    |--------------------------------------------------------------------------
+    | COMPANY LOGOUT
+    |--------------------------------------------------------------------------
+    */
+
+        if (!AuthHelper::authorize($auth, 'company')) {
+
+            return response()->json([
+                'message' => 'Unauthorized'
+            ], 403);
+        }
+
+        $auth->currentAccessToken()->delete();
 
         return response()->json([
-            'message' => 'Company logged out'
+            'message' => 'Company logged out successfully'
         ]);
     }
 }

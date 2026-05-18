@@ -41,4 +41,9 @@ class Company extends Authenticatable
     {
         return $this->hasMany(Application::class);
     }
+
+    public function isCompany()
+    {
+        return $this instanceof self;
+    }
 }

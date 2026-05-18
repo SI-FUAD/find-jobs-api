@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Job;
+use App\Helpers\AuthHelper;
 use App\Http\Resources\JobCardResource;
 
 class SavedJobController extends Controller
@@ -11,21 +12,53 @@ class SavedJobController extends Controller
     // ✅ Get all saved jobs
     public function index(Request $request)
     {
-        $user = $request->user();
+        $auth = $request->user();
 
-        if ($user->role !== 'user') {
+        $isUser = AuthHelper::authorize($auth, 'user');
+
+        if (!$isUser) {
+
             return response()->json([
                 'message' => 'Unauthorized'
             ], 403);
         }
 
-        $savedJobs = $user->savedJobs()
+        /*
+|--------------------------------------------------------------------------
+| AUTH OPTIMIZATION
+|--------------------------------------------------------------------------
+*/
+
+        $savedJobIds = $auth->savedJobs()
+            ->pluck('jobs.id')
+            ->toArray();
+
+        $appliedJobIds = $auth->applications()
+            ->pluck('job_id')
+            ->toArray();
+
+        /*
+|--------------------------------------------------------------------------
+| SAVED JOBS
+|--------------------------------------------------------------------------
+*/
+
+        $savedJobs = $auth->savedJobs()
             ->with([
                 'company',
-                'applications'
             ])
             ->orderByPivot('created_at', 'desc')
             ->get();
+
+        /*
+|--------------------------------------------------------------------------
+| SHARE WITH RESOURCE
+|--------------------------------------------------------------------------
+*/
+
+        $request->attributes->set('savedJobIds', $savedJobIds);
+
+        $request->attributes->set('appliedJobIds', $appliedJobIds);
 
         return JobCardResource::collection($savedJobs);
     }

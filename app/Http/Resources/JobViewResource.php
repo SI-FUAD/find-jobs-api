@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use App\Helpers\AuthHelper;
 
-class JobCardResource extends JsonResource
+class JobViewResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
@@ -19,6 +19,12 @@ class JobCardResource extends JsonResource
         $appliedJobIds = $request->attributes->get('appliedJobIds', []);
 
         return [
+
+            /*
+            |--------------------------------------------------------------------------
+            | JOB
+            |--------------------------------------------------------------------------
+            */
 
             'jobId' => $this->job_id,
 
@@ -34,13 +40,19 @@ class JobCardResource extends JsonResource
 
             'vacancy' => $this->vacancy,
 
-            'description' => str($this->description)->limit(140),
+            'description' => $this->description,
 
             'datePosted' => $this->date_posted,
 
             'deadline' => $this->deadline,
 
             'isExpired' => now()->gt($this->deadline),
+
+            /*
+            |--------------------------------------------------------------------------
+            | COMPANY
+            |--------------------------------------------------------------------------
+            */
 
             'company' => [
 
@@ -50,6 +62,12 @@ class JobCardResource extends JsonResource
 
                 'brandColor' => $this->company->logo_color,
             ],
+
+            /*
+            |--------------------------------------------------------------------------
+            | AUTH
+            |--------------------------------------------------------------------------
+            */
 
             'auth' => [
 
